@@ -15,11 +15,10 @@ use std::net::TcpListener;
 fn main() {
     let mut listener = TcpListener::bind("127.0.0.1:9092").unwrap();
 
-    //let mut bufz = [0; 8192];
-
     for opt_stream in listener.incoming() {
         match opt_stream {
             Ok(mut stream) => {
+                loop{
                 let mut buf = BytesMut::zeroed(1024);
                 let size = stream.read(&mut buf).unwrap();
                 buf.truncate(size);
@@ -58,7 +57,7 @@ fn main() {
 
                 // Send the complete response
                 stream.write_all(&buf).unwrap();
-            }
+            }}
             Err(e) => {
                 println!("error: {}", e);
             }

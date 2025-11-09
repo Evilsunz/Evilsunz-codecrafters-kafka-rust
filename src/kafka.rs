@@ -1,39 +1,6 @@
 
-use std::net::TcpListener;
-use std::io::{Read, Write};
 use bytes::{BytesMut, Buf};
 use anyhow::Result;
-
-// fn main() {
-//     let listener = TcpListener::bind("127.0.0.1:9092").unwrap();
-//     println!("Kafka server listening on 127.0.0.1:9092");
-//
-//     for opt_stream in listener.incoming() {
-//         match opt_stream {
-//             Ok(mut stream) => {
-//                 let mut buf = BytesMut::zeroed(1024);
-//                 let size = stream.read(&mut buf).unwrap();
-//                 buf.truncate(size);
-//
-//                 println!("Received {} bytes: {:?}", size, buf);
-//
-//                 match parse_kafka_request(&mut buf) {
-//                     Ok(request) => {
-//                         println!("Parsed request: {:#?}", request);
-//                         // Send a simple response
-//                         stream.write_all(&[0, 0, 0, 5, 0, 0, 0, 7]).unwrap();
-//                     }
-//                     Err(e) => {
-//                         println!("Error parsing request: {}", e);
-//                     }
-//                 }
-//             }
-//             Err(e) => {
-//                 println!("error: {}", e);
-//             }
-//         }
-//     }
-// }
 
 #[derive(Debug)]
 pub struct KafkaRequest {
