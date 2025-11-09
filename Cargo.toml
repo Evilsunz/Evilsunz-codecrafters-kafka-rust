@@ -1,3 +1,4 @@
+#patch = { crates-io = { kafka-protocol = { path = "/Users/maxim/.rhack/kafka-protocol-0.16.0" } , bytes = { path = "/Users/maxim/.rhack/bytes-1.10.1" } } }
 [package]
 name = "codecrafters-kafka"
 version = "0.1.0"
@@ -7,6 +8,12 @@ rust-version = "1.80"
 
 [dependencies]
 bytes = "1.10.1"
-kafka-protocol = "0.16.0"
+kafka-protocol = { version = "0.16.0", features = ["messages_enums"] }
+
+#bytes = {path = "/Users/maxim/.rhack/bytes-1.10.1"}
+##kafka-protocol = { version = "0.16.0", features = ["messages_enums"] }
+#kafka-protocol = { path = "/Users/maxim/.rhack/kafka-protocol-0.16.0",features = ["messages_enums"] }
+
 anyhow = "1.0.100"
 indexmap = "2.12.0"                             # error handling
+cargo-rhack = "0.1.5"

@@ -1,78 +1,97 @@
-mod kafka;
+mod handlers;
 
-use crate::kafka::parse_kafka_request;
-use bytes::{Bytes, BytesMut};
-use kafka_protocol::messages::api_versions_response::ApiVersion;
-use kafka_protocol::messages::{request_header, ApiKey, ApiVersionsResponse, RequestHeader};
-use kafka_protocol::protocol::buf::ByteBuf;
-use kafka_protocol::protocol::{
-    decode_request_header_from_buffer, encode_request_header_into_buffer, types, Encodable,
-};
+use kafka_protocol::messages::{ApiKey, ApiVersionsRequest, DescribeTopicPartitionsRequest, RequestHeader, RequestKind};
+use std::io;
 use std::io::{Read, Write};
 use std::net::{TcpListener, TcpStream};
 use std::thread;
-// use kafka_protocol::protocol::buf::ByteBuf;
+use anyhow::bail;
+use bytes::{Buf, BytesMut};
+use kafka_protocol::protocol::buf::ByteBuf;
+use kafka_protocol::protocol::{Decodable, StrBytes};
+use crate::handlers::{process_api_version, process_describe_topic_partitions};
 
 fn main() {
-    let mut listener = TcpListener::bind("127.0.0.1:9092").unwrap();
-
-    for opt_stream in listener.incoming() {
-        match opt_stream {
-            Ok(mut stream) => {
+    let listener = TcpListener::bind("127.0.0.1:9092").expect("Failed to bind to port 9092");
+    BytesMut::new();
+    println!("Kafka broker listening on 127.0.0.1:9092");
+    ApiVersionsRequest::default().with_client_software_name(StrBytes::from(""));
+    for stream_result in listener.incoming() {
+        match stream_result {
+            Ok(stream) => {
                 thread::spawn(move || {
-                    handle_stream(stream.try_clone().unwrap());
+                    if let Err(e) = handle_client(stream) {
+                        eprintln!("Error handling client: {}", e);
+                    }
                 });
-              }
+            }
             Err(e) => {
-                println!("error: {}", e);
+                eprintln!("Failed to accept connection: {}", e);
             }
         }
     }
 }
 
-fn handle_stream(mut stream: TcpStream){
-    loop{
-        let mut buf = BytesMut::zeroed(1024);
-        let size = stream.read(&mut buf).unwrap();
-        buf.truncate(size);
-        let req = parse_kafka_request(&mut buf).unwrap();
-        println!("{:#?}", req);
-        // First, encode the response body WITHOUT the message length prefix
-        let mut response_buf = BytesMut::new();
-
-        // Encode correlation_id
-        let correlation_id = req.correlation_id;
-        response_buf.extend_from_slice(&correlation_id.to_be_bytes());
-
-        let api_version_resp = ApiVersionsResponse::default()
-            .with_api_keys(vec!(
-                ApiVersion::default()
-                    .with_api_key(18)
-                    .with_min_version(0)
-                    .with_max_version(4),
-                ApiVersion::default()
-                    .with_api_key(75)
-                    .with_min_version(0)
-                    .with_max_version(0)
-            ));
-
-        // Encode the response
-        let api_response = match api_version_resp.encode(&mut response_buf, req.api_version) {
-            Ok(_) => {}
-            Err(_) => {
-                ApiVersionsResponse::default()
-                    .with_error_code(35)
-                    .encode(&mut response_buf, 0).unwrap();
+fn handle_client(mut stream: TcpStream) -> io::Result<()> {
+    loop {
+        let response_buf = match parse_kafka_request(&mut stream) {
+            Ok((header, request)) => {
+                handle_request(header, request)
+            }
+            Err(e) => {
+                eprintln!("Failed to parse Kafka request: {}", e);
+                break;
             }
         };
-
-        // NOW create the final buffer with the message length prefix
         let mut buf = BytesMut::new();
         let message_length = response_buf.len() as i32;
         buf.extend_from_slice(&message_length.to_be_bytes());
         buf.extend_from_slice(&response_buf);
-
-        // Send the complete response
-        stream.write_all(&buf).unwrap();
+        stream.write_all(&buf)?;
     }
+    Ok(())
+}
+
+fn handle_request(header: RequestHeader ,request: RequestKind) -> BytesMut {
+    println!("Request: {:?}", request);
+    match request {
+        RequestKind::ApiVersions(req) => process_api_version(header, req),
+        RequestKind::DescribeTopicPartitions(req) => process_describe_topic_partitions(header,req),
+        _ => {
+            panic!("Unsupported request kind");
+        }
+    }
+}
+
+fn parse_kafka_request(stream: &mut TcpStream) -> anyhow::Result<(RequestHeader, RequestKind)> {
+    let mut buf = BytesMut::zeroed(1024);
+    let bytes_read = stream.read(&mut buf)?;
+    buf.truncate(bytes_read);
+
+    let message_length = buf.get_i32();
+
+    let api_key_value = bytes::Buf::get_i16(&mut buf.peek_bytes(0..2));
+    let api_key =
+        ApiKey::try_from(api_key_value).map_err(|_| anyhow::Error::msg("Unknown API key"))?;
+
+    let api_version = bytes::Buf::get_i16(&mut buf.peek_bytes(2..4));
+    let header_version = api_key.request_header_version(api_version);
+    let header = RequestHeader::decode(&mut buf, header_version)?;
+    let request = match api_key {
+        ApiKey::ApiVersions => {
+            let api_versions_request = ApiVersionsRequest::decode(&mut buf, header.request_api_version).unwrap_or_else(|_| {
+                //Will send ApiVersionsRequest with error in handlers
+                ApiVersionsRequest::default()
+            });
+            RequestKind::ApiVersions(api_versions_request)
+        }
+        ApiKey::DescribeTopicPartitions => {
+            let describe_request =
+                DescribeTopicPartitionsRequest::decode(&mut buf, header.request_api_version)?;
+            RequestKind::DescribeTopicPartitions(describe_request)
+        }
+        _ => bail!("Unsupported API key: {:?}", api_key),
+    };
+
+    Ok((header, request))
 }
