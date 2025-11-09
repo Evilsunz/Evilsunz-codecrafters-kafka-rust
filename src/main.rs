@@ -49,7 +49,11 @@ fn handle_stream(mut stream: TcpStream){
                 ApiVersion::default()
                     .with_api_key(18)
                     .with_min_version(0)
-                    .with_max_version(4)
+                    .with_max_version(4),
+                ApiVersion::default()
+                    .with_api_key(75)
+                    .with_min_version(0)
+                    .with_max_version(0)
             ));
 
         // Encode the response
