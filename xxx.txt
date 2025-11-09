@@ -1,0 +1,8 @@
+[tester::#NC5] Received bytes:
+[tester::#NC5] Hex (bytes 0-5)                                 | ASCII
+[your_program]     correlation_id: 1686493458,
+[tester::#NC5] ------------------------------------------------+------------------
+[tester::#NC5] 00 00 00 00 00 00                               | ......
+[tester::#NC5]  ^--------^                                       ^--^
+[tester::#NC5] Error: Expected INT32 value to be 1686493458, got 0
+[tester::#NC5] Test failed

@@ -3,8 +3,9 @@ mod kafka;
 use std::net::TcpListener;
 use std::io::{Read, Write};
 use bytes::BytesMut;
-use kafka_protocol::messages::{ApiKey, RequestHeader};
-use kafka_protocol::protocol::{decode_request_header_from_buffer, encode_request_header_into_buffer, types};
+use kafka_protocol::messages::{request_header, ApiKey, ApiVersionsResponse, RequestHeader};
+use kafka_protocol::messages::api_versions_response::ApiVersion;
+use kafka_protocol::protocol::{decode_request_header_from_buffer, encode_request_header_into_buffer, types, Encodable};
 use kafka_protocol::protocol::buf::ByteBuf;
 use crate::kafka::parse_kafka_request;
 // use kafka_protocol::protocol::buf::ByteBuf;
@@ -22,26 +23,29 @@ fn main() {
                 let size = stream.read(&mut buf).unwrap();
                 buf.truncate(size);
                 let req =parse_kafka_request(&mut buf).unwrap();
-                println!("{:#?}", req);
-
+                //println!("{:#?}", req);
                 let mut buf = BytesMut::new();
-                let mut req_header = RequestHeader::default();
-                // req_header.request_api_version = 3;
-                // req_header.request_api_key = ApiKey::ApiVersions as i16;
-                req_header.correlation_id = req.correlation_id;
-                encode_request_header_into_buffer(&mut buf, &req_header).unwrap();
+                // Reserve space for the message length (will be written later)
+                buf.extend_from_slice(&[0u8; 4]);
+
+                // Encode correlation_id for the response
+                let correlation_id = req.correlation_id;
+                buf.extend_from_slice(&correlation_id.to_be_bytes());
+
+                // let request_header = RequestHeader::default().with_correlation_id(req.correlation_id);
+                // //request_header.encode(&mut buf,0);
+                // encode_request_header_into_buffer(&mut buf,&request_header);
+                // Create and encode the response - MUST use version 0 for ApiVersionsResponse
+                let api_version_resp = ApiVersionsResponse::default()
+                    .with_error_code(35);
+                api_version_resp.encode(&mut buf, 0).unwrap();  // Use version 0, not the request version
+
+                // Write the message length at the beginning (total size - 4 bytes for the length field itself)
+                let message_length = (buf.len() - 4) as i32;
+                buf[0..4].copy_from_slice(&message_length.to_be_bytes());
 
                 stream.write_all(&buf).unwrap();
 
-                // println!(" ++++++++ {:?}", size);
-                // println!(" ++++++++ {:?}", buf);
-                // decode_request_header_from_buffer(&mut buf);
-                // let message_size = u32::from_be_bytes(buffer[0..4].try_into().unwrap());
-                // let request_api_key = u16::from_be_bytes(buffer[4..6].try_into().unwrap());
-                // let request_api_version = u16::from_be_bytes(buffer[6..8].try_into().unwrap());
-                // let correlation_id = u32::from_be_bytes(buffer[8..12].try_into().unwrap());
-                //println!(" ++++++++ {:?}", header);
-                // stream.write_all(&req.correlation_id.to_be_bytes()).unwrap();
             }
             Err(e) => {
                 println!("error: {}", e);
