@@ -8,4 +8,5 @@ rust-version = "1.80"
 [dependencies]
 bytes = "1.10.1"
 kafka-protocol = "0.16.0"
-anyhow = "1.0.100"                             # error handling
+anyhow = "1.0.100"
+indexmap = "2.12.0"                             # error handling
