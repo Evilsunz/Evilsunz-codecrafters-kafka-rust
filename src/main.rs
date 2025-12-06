@@ -35,8 +35,8 @@ fn main() {
 fn handle_client(mut stream: TcpStream) -> io::Result<()> {
     loop {
         let response_buf = match parse_kafka_request(&mut stream) {
-            Ok((header, request)) => {
-                handle_request(header, request)
+            Ok((api_key, header, request)) => {
+                handle_request(api_key, header, request)
             }
             Err(e) => {
                 eprintln!("Failed to parse Kafka request: {}", e);
@@ -52,18 +52,18 @@ fn handle_client(mut stream: TcpStream) -> io::Result<()> {
     Ok(())
 }
 
-fn handle_request(header: RequestHeader ,request: RequestKind) -> BytesMut {
+fn handle_request(api_key: ApiKey, header: RequestHeader ,request: RequestKind) -> BytesMut {
     println!("Request: {:?}", request);
     match request {
         RequestKind::ApiVersions(req) => process_api_version(header, req),
-        RequestKind::DescribeTopicPartitions(req) => process_describe_topic_partitions(header,req),
+        RequestKind::DescribeTopicPartitions(req) => process_describe_topic_partitions(api_key, header,req),
         _ => {
             panic!("Unsupported request kind");
         }
     }
 }
 
-fn parse_kafka_request(stream: &mut TcpStream) -> anyhow::Result<(RequestHeader, RequestKind)> {
+fn parse_kafka_request(stream: &mut TcpStream) -> anyhow::Result<(ApiKey, RequestHeader, RequestKind)> {
     let mut buf = BytesMut::zeroed(1024);
     let bytes_read = stream.read(&mut buf)?;
     buf.truncate(bytes_read);
@@ -93,5 +93,5 @@ fn parse_kafka_request(stream: &mut TcpStream) -> anyhow::Result<(RequestHeader,
         _ => bail!("Unsupported API key: {:?}", api_key),
     };
 
-    Ok((header, request))
+    Ok((api_key, header, request))
 }
