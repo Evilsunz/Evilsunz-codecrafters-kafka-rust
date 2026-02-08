@@ -2,12 +2,13 @@ use std::collections::BTreeMap;
 use std::fs;
 use bytes::BytesMut;
 use kafka_protocol::messages::api_versions_response::ApiVersion;
-use kafka_protocol::messages::{ApiKey, ApiVersionsRequest, ApiVersionsResponse, DescribeTopicPartitionsRequest, DescribeTopicPartitionsResponse, RequestHeader, RequestKind, ResponseHeader, TopicName};
+use kafka_protocol::messages::{ApiKey, ApiVersionsRequest, ApiVersionsResponse, BrokerId, DescribeTopicPartitionsRequest, DescribeTopicPartitionsResponse, RequestHeader, RequestKind, ResponseHeader, TopicName};
 use kafka_protocol::messages::describe_topic_partitions_response::{Cursor, DescribeTopicPartitionsResponsePartition, DescribeTopicPartitionsResponseTopic};
 use kafka_protocol::protocol::Encodable;
 use kafka_protocol::protocol::types::Uuid;
 use kafka_protocol::ResponseError;
-use crate::kraft_parser::{decode, RecordType, Topic};
+use crate::meta_parser::{decode, Partition, RecordType, Topic};
+use crate::utils::group_topics;
 
 pub fn process_api_version(header: RequestHeader, req: ApiVersionsRequest) -> BytesMut{
     // First, encode the response body WITHOUT the message length prefix
@@ -47,16 +48,7 @@ pub fn process_describe_topic_partitions(api_key : ApiKey, header: RequestHeader
     let res = decode().unwrap();
     println!(" +++++ {:#?}", res);
 
-    let topics: Vec<&Topic> = res
-        .iter()
-        .filter_map(|rt| match rt {
-            RecordType::TopicValue(t) => Some(t),
-            _ => None,
-        })
-        .collect();
-
-    //Temp
-    let parsed_topic = topics.get(0).unwrap().to_owned();
+    let grouped = group_topics(res);
 
     let mut response_buf = BytesMut::new();
 
@@ -69,27 +61,29 @@ pub fn process_describe_topic_partitions(api_key : ApiKey, header: RequestHeader
         );
 
     let mut response_topics = Vec::with_capacity(req.topics.len());
+
     for topic in req.topics {
-        if (topic.name.to_string() == parsed_topic.name) {
-            //todo
-            let partition = DescribeTopicPartitionsResponsePartition::default();
-            response_topics.push(
-                DescribeTopicPartitionsResponseTopic::default()
-                    //.with_error_code(ResponseError::UnknownTopicOrPartition.code())
-                    .with_name(Some(TopicName::from(kafka_protocol::protocol::StrBytes::from(parsed_topic.name.clone()))))
-                    .with_is_internal(false)
-                    .with_topic_id(parsed_topic.uuid)
-                    .with_partitions(vec![partition])
-            )
+        let requested_name = topic.name.to_string();
+        let matched_topic = grouped.iter().find(|tp| tp.topic.name == requested_name);
+
+        let response_topic = if let Some(tp) = matched_topic {
+            let partitions_response = build_partiotions_response(tp.partitions.clone());
+            DescribeTopicPartitionsResponseTopic::default()
+                .with_name(Some(TopicName::from(kafka_protocol::protocol::StrBytes::from(
+                    tp.topic.name.clone(),
+                ))))
+                .with_is_internal(false)
+                .with_topic_id(tp.topic.uuid)
+                .with_partitions(partitions_response)
         } else {
-            response_topics.push(
-                DescribeTopicPartitionsResponseTopic::default()
-                    .with_error_code(ResponseError::UnknownTopicOrPartition.code())
-                    .with_name(Some(topic.name.clone()))
-                    .with_is_internal(false)
-                    .with_topic_id("00000000-0000-0000-0000-000000000000".parse().unwrap())
-            )
-        }
+            DescribeTopicPartitionsResponseTopic::default()
+                .with_error_code(ResponseError::UnknownTopicOrPartition.code())
+                .with_name(Some(topic.name.clone()))
+                .with_is_internal(false)
+                .with_topic_id(uuid::Uuid::nil())
+        };
+
+        response_topics.push(response_topic);
     }
 
 
@@ -101,4 +95,32 @@ pub fn process_describe_topic_partitions(api_key : ApiKey, header: RequestHeader
     //println!("ver {:#?}", header.request_api_version);
     // println!("buf {:#?}", response_buf);
     response_buf
+}
+
+fn build_partiotions_response (mut partitions: Vec<Partition>) -> Vec<DescribeTopicPartitionsResponsePartition>{
+    partitions.sort_by_key(|p| p.partition_id);
+    partitions.into_iter().map(|p | {
+
+        let replica_nodes = match p.rep_array_length {
+            0 => Vec::new(),
+            _ => vec![BrokerId::from(p.rep_array)],
+        };
+
+        let isr_nodes = match p.in_sync_rep_arr_length {
+            0 => Vec::new(),
+            _ => vec![BrokerId::from(p.in_sync_rep_arr)],
+        };
+
+        DescribeTopicPartitionsResponsePartition::default()
+            //.with_error_code(ResponseError::None.code())
+            .with_partition_index(p.partition_id as i32)
+            .with_leader_id(BrokerId::from(p.leader))
+            .with_leader_epoch(p.leader_eponch)
+            .with_replica_nodes(replica_nodes)
+            .with_isr_nodes(isr_nodes)
+            .with_eligible_leader_replicas(Some(Vec::new()))
+            .with_last_known_elr(Some(Vec::new()))
+            .with_offline_replicas(Vec::new())
+            .with_unknown_tagged_fields(BTreeMap::new())
+    }).collect()
 }

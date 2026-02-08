@@ -103,7 +103,7 @@ pub enum RecordType {
     None
 }
 
-#[derive(Debug)]
+#[derive(Debug,Clone)]
 pub struct Header {
     pub frame_version: u8,
     pub record_type: u8,
@@ -124,7 +124,7 @@ pub struct Topic {
     pub uuid: uuid::Uuid,
 }
 
-#[derive(Debug)]
+#[derive(Debug,Clone)]
 pub struct Partition {
     pub header: Header,
     pub partition_id: u32,

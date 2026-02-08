@@ -1,5 +1,6 @@
 mod handlers;
-mod kraft_parser;
+mod meta_parser;
+mod utils;
 
 use kafka_protocol::messages::{ApiKey, ApiVersionsRequest, DescribeTopicPartitionsRequest, RequestHeader, RequestKind};
 use std::io;
