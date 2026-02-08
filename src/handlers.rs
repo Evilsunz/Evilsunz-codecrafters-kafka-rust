@@ -11,7 +11,7 @@ use kafka_protocol::protocol::types::Uuid;
 use kafka_protocol::records::RecordBatchDecoder;
 use kafka_protocol::ResponseError;
 use crate::meta_parser::{decode, Partition, RecordType, Topic};
-use crate::utils::group_topics;
+use crate::utils::{group_topics, read_records};
 
 pub fn process_api_version(header: RequestHeader, req: ApiVersionsRequest) -> BytesMut{
     // First, encode the response body WITHOUT the message length prefix
@@ -34,7 +34,11 @@ pub fn process_api_version(header: RequestHeader, req: ApiVersionsRequest) -> By
             ApiVersion::default()
                 .with_api_key(1)
                 .with_min_version(0)
-                .with_max_version(16)
+                .with_max_version(16),
+            ApiVersion::default()
+                .with_api_key(0)
+                .with_min_version(0)
+                .with_max_version(11)
         ));
 
     // Encode the response
@@ -70,22 +74,17 @@ pub fn process_fetch(api_key : ApiKey, header: RequestHeader, req: FetchRequest)
     for topic in req.topics {
 
         let requested_name = topic.topic_id.to_string();
+        //HashMap ?
         let matched_topic = grouped.iter().find(|tp| tp.topic.uuid.to_string() == requested_name);
 
         let response_topic = if let Some(tp) = matched_topic {
-
-            let path = format!("/tmp/kraft-combined-logs/{}-{}/00000000000000000000.log", tp.topic.name,tp.partitions.first().unwrap().partition_id);
-            let file = fs::read(path).unwrap();
-            let mut buf = BytesMut::from(&file[..]);
-
             FetchableTopicResponse::default()
                 .with_topic(topic.topic)
                 .with_topic_id(topic.topic_id)
                 .with_partitions(vec![PartitionData::default()
                     //.with_error_code(ResponseError::UnknownTopicId.code())
                     .with_partition_index(0)
-                    //TODO Just read all file (/tmp/kraft-combined-logs/raspberry-0/00000000000000000000.log) to bytes and place it here
-                    .with_records(Some(buf.copy_to_bytes(buf.len())))
+                    .with_records(Some(read_records(tp.topic.name.as_str(),tp.partitions.first().unwrap().partition_id)))
                 ])
         } else {
             FetchableTopicResponse::default()

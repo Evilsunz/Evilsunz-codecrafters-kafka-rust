@@ -1,3 +1,5 @@
+use std::fs;
+use bytes::{Buf, Bytes, BytesMut};
 use indexmap::IndexMap;
 use uuid::Uuid;
 use crate::meta_parser::{Partition, RecordType, Topic};
@@ -44,4 +46,11 @@ pub fn group_topics(records: Vec<RecordType>) -> Vec<TopicWithPartitions> {
             })
         })
         .collect()
+}
+
+pub fn read_records(topic_name: &str, partition_id : u32) -> Bytes{
+    let path = format!("/tmp/kraft-combined-logs/{}-{}/00000000000000000000.log", topic_name, partition_id);
+    let file = fs::read(path).unwrap();
+    let mut buf = BytesMut::from(&file[..]);
+    buf.copy_to_bytes(buf.len())
 }
