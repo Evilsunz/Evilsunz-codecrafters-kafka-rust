@@ -49,6 +49,11 @@ pub fn process_api_version(header: RequestHeader, req: ApiVersionsRequest) -> By
 }
 
 pub fn process_fetch(api_key : ApiKey, header: RequestHeader, req: FetchRequest) -> BytesMut {
+    let res = decode().unwrap_or_else(|_| Vec::new());
+    println!(" +++++ {:#?}", res);
+
+    let grouped = group_topics(res);
+
     let mut response_buf = BytesMut::new();
 
     let _ = ResponseHeader::default()
@@ -61,14 +66,28 @@ pub fn process_fetch(api_key : ApiKey, header: RequestHeader, req: FetchRequest)
 
     let mut response_topics = Vec::with_capacity(req.topics.len());
     for topic in req.topics {
-        let fetchable_topic_response = FetchableTopicResponse::default()
-            .with_topic(topic.topic)
-            .with_topic_id(topic.topic_id)
-            .with_partitions(vec![PartitionData::default()
-                .with_error_code(ResponseError::UnknownTopicId.code())
-                .with_partition_index(0)
-            ]);
-        response_topics.push(fetchable_topic_response);
+
+        let requested_name = topic.topic_id.to_string();
+        let matched_topic = grouped.iter().find(|tp| tp.topic.uuid.to_string() == requested_name);
+
+        let response_topic = if let Some(tp) = matched_topic {
+            FetchableTopicResponse::default()
+                .with_topic(topic.topic)
+                .with_topic_id(topic.topic_id)
+                .with_partitions(vec![PartitionData::default()
+                    //.with_error_code(ResponseError::UnknownTopicId.code())
+                    .with_partition_index(0)
+                ])
+        } else {
+            FetchableTopicResponse::default()
+                .with_topic(topic.topic)
+                .with_topic_id(topic.topic_id)
+                .with_partitions(vec![PartitionData::default()
+                    .with_error_code(ResponseError::UnknownTopicId.code())
+                    .with_partition_index(0)
+                ])
+        };
+        response_topics.push(response_topic);
     }
 
     let _ = FetchResponse::default()
