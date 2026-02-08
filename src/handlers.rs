@@ -27,7 +27,11 @@ pub fn process_api_version(header: RequestHeader, req: ApiVersionsRequest) -> By
             ApiVersion::default()
                 .with_api_key(75)
                 .with_min_version(0)
-                .with_max_version(0)
+                .with_max_version(0),
+            ApiVersion::default()
+                .with_api_key(1)
+                .with_min_version(0)
+                .with_max_version(16)
         ));
 
     // Encode the response
