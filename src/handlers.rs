@@ -2,7 +2,7 @@ use std::collections::BTreeMap;
 use std::fs;
 use bytes::BytesMut;
 use kafka_protocol::messages::api_versions_response::ApiVersion;
-use kafka_protocol::messages::{ApiKey, ApiVersionsRequest, ApiVersionsResponse, BrokerId, DescribeTopicPartitionsRequest, DescribeTopicPartitionsResponse, RequestHeader, RequestKind, ResponseHeader, TopicName};
+use kafka_protocol::messages::{ApiKey, ApiVersionsRequest, ApiVersionsResponse, BrokerId, DescribeTopicPartitionsRequest, DescribeTopicPartitionsResponse, FetchRequest, FetchResponse, RequestHeader, RequestKind, ResponseHeader, TopicName};
 use kafka_protocol::messages::describe_topic_partitions_response::{Cursor, DescribeTopicPartitionsResponsePartition, DescribeTopicPartitionsResponseTopic};
 use kafka_protocol::protocol::Encodable;
 use kafka_protocol::protocol::types::Uuid;
@@ -44,6 +44,21 @@ pub fn process_api_version(header: RequestHeader, req: ApiVersionsRequest) -> By
         }
     };
 
+    response_buf
+}
+
+pub fn process_fetch(api_key : ApiKey, header: RequestHeader, req: FetchRequest) -> BytesMut {
+    let mut response_buf = BytesMut::new();
+
+    let _ = ResponseHeader::default()
+        .with_correlation_id(header.correlation_id)
+        .with_unknown_tagged_fields(BTreeMap::new())
+        .encode(
+            &mut response_buf,
+            api_key.response_header_version(header.request_api_version),
+        );
+
+    let _ = FetchResponse::default().encode(&mut response_buf, header.request_api_version);
     response_buf
 }
 

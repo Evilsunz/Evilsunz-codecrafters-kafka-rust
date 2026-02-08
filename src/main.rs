@@ -2,7 +2,7 @@ mod handlers;
 mod meta_parser;
 mod utils;
 
-use kafka_protocol::messages::{ApiKey, ApiVersionsRequest, DescribeTopicPartitionsRequest, RequestHeader, RequestKind};
+use kafka_protocol::messages::{ApiKey, ApiVersionsRequest, DescribeTopicPartitionsRequest, FetchRequest, RequestHeader, RequestKind};
 use std::io;
 use std::io::{Read, Write};
 use std::net::{TcpListener, TcpStream};
@@ -11,7 +11,7 @@ use anyhow::bail;
 use bytes::{Buf, BytesMut};
 use kafka_protocol::protocol::buf::ByteBuf;
 use kafka_protocol::protocol::{Decodable, StrBytes};
-use crate::handlers::{process_api_version, process_describe_topic_partitions};
+use crate::handlers::{process_api_version, process_describe_topic_partitions, process_fetch};
 
 fn main() {
     let listener = TcpListener::bind("127.0.0.1:9092").expect("Failed to bind to port 9092");
@@ -59,6 +59,7 @@ fn handle_request(api_key: ApiKey, header: RequestHeader ,request: RequestKind) 
     match request {
         RequestKind::ApiVersions(req) => process_api_version(header, req),
         RequestKind::DescribeTopicPartitions(req) => process_describe_topic_partitions(api_key, header,req),
+        RequestKind::Fetch(req) => process_fetch(api_key, header,req),
         _ => {
             panic!("Unsupported request kind");
         }
@@ -91,6 +92,11 @@ fn parse_kafka_request(stream: &mut TcpStream) -> anyhow::Result<(ApiKey, Reques
             let describe_request =
                 DescribeTopicPartitionsRequest::decode(&mut buf, header.request_api_version)?;
             RequestKind::DescribeTopicPartitions(describe_request)
+        }
+        ApiKey::Fetch => {
+            let describe_request =
+                FetchRequest::decode(&mut buf, header.request_api_version)?;
+            RequestKind::Fetch(describe_request)
         }
         _ => bail!("Unsupported API key: {:?}", api_key),
     };
