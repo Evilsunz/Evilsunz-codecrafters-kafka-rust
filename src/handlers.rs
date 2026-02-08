@@ -1,12 +1,14 @@
 use std::collections::BTreeMap;
-use std::fs;
-use bytes::BytesMut;
+use std::{fs, thread};
+use std::process::Command;
+use bytes::{Buf, BytesMut};
 use kafka_protocol::messages::api_versions_response::ApiVersion;
 use kafka_protocol::messages::{ApiKey, ApiVersionsRequest, ApiVersionsResponse, BrokerId, DescribeTopicPartitionsRequest, DescribeTopicPartitionsResponse, FetchRequest, FetchResponse, RequestHeader, RequestKind, ResponseHeader, TopicName};
 use kafka_protocol::messages::describe_topic_partitions_response::{Cursor, DescribeTopicPartitionsResponsePartition, DescribeTopicPartitionsResponseTopic};
 use kafka_protocol::messages::fetch_response::{FetchableTopicResponse, PartitionData};
 use kafka_protocol::protocol::Encodable;
 use kafka_protocol::protocol::types::Uuid;
+use kafka_protocol::records::RecordBatchDecoder;
 use kafka_protocol::ResponseError;
 use crate::meta_parser::{decode, Partition, RecordType, Topic};
 use crate::utils::group_topics;
@@ -71,12 +73,19 @@ pub fn process_fetch(api_key : ApiKey, header: RequestHeader, req: FetchRequest)
         let matched_topic = grouped.iter().find(|tp| tp.topic.uuid.to_string() == requested_name);
 
         let response_topic = if let Some(tp) = matched_topic {
+
+            let path = format!("/tmp/kraft-combined-logs/{}-{}/00000000000000000000.log", tp.topic.name,tp.partitions.first().unwrap().partition_id);
+            let file = fs::read(path).unwrap();
+            let mut buf = BytesMut::from(&file[..]);
+
             FetchableTopicResponse::default()
                 .with_topic(topic.topic)
                 .with_topic_id(topic.topic_id)
                 .with_partitions(vec![PartitionData::default()
                     //.with_error_code(ResponseError::UnknownTopicId.code())
                     .with_partition_index(0)
+                    //TODO Just read all file (/tmp/kraft-combined-logs/raspberry-0/00000000000000000000.log) to bytes and place it here
+                    .with_records(Some(buf.copy_to_bytes(buf.len())))
                 ])
         } else {
             FetchableTopicResponse::default()
