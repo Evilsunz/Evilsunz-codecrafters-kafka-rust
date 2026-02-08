@@ -8,7 +8,7 @@ rust-version = "1.80"
 
 [dependencies]
 bytes = "1.10.1"
-kafka-protocol = { version = "0.16.0", features = ["messages_enums"] }
+kafka-protocol = { version = "0.17.0", features = ["messages_enums"] }
 
 #bytes = {path = "/Users/maxim/.rhack/bytes-1.10.1"}
 ##kafka-protocol = { version = "0.16.0", features = ["messages_enums"] }
@@ -17,3 +17,10 @@ kafka-protocol = { version = "0.16.0", features = ["messages_enums"] }
 anyhow = "1.0.100"
 indexmap = "2.12.0"                             # error handling
 cargo-rhack = "0.1.5"
+
+[dependencies.uuid]
+version = "1.20.0"
+# Lets you generate random UUIDs
+features = [
+    "v4",
+]

@@ -6,3 +6,8 @@
 [tester::#NC5]  ^--------^                                       ^--^
 [tester::#NC5] Error: Expected INT32 value to be 1686493458, got 0
 [tester::#NC5] Test failed
+
+
++++ Parse log file +++
+
+https://github.com/cc-code-examples/proud-mallard-224087/blob/main/app/src/protocol/file/cluster_metadata_log/records.rs
