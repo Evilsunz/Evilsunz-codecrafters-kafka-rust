@@ -86,7 +86,8 @@ pub fn process_describe_topic_partitions(api_key : ApiKey, header: RequestHeader
         response_topics.push(response_topic);
     }
 
-
+    //sort
+    response_topics.sort_by_key(|r| r.name.clone());
     let _ = DescribeTopicPartitionsResponse::default()
         .with_unknown_tagged_fields(BTreeMap::new())
         .with_topics(response_topics)
