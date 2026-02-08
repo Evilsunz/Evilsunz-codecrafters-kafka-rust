@@ -4,6 +4,7 @@ use bytes::BytesMut;
 use kafka_protocol::messages::api_versions_response::ApiVersion;
 use kafka_protocol::messages::{ApiKey, ApiVersionsRequest, ApiVersionsResponse, BrokerId, DescribeTopicPartitionsRequest, DescribeTopicPartitionsResponse, FetchRequest, FetchResponse, RequestHeader, RequestKind, ResponseHeader, TopicName};
 use kafka_protocol::messages::describe_topic_partitions_response::{Cursor, DescribeTopicPartitionsResponsePartition, DescribeTopicPartitionsResponseTopic};
+use kafka_protocol::messages::fetch_response::{FetchableTopicResponse, PartitionData};
 use kafka_protocol::protocol::Encodable;
 use kafka_protocol::protocol::types::Uuid;
 use kafka_protocol::ResponseError;
@@ -58,7 +59,22 @@ pub fn process_fetch(api_key : ApiKey, header: RequestHeader, req: FetchRequest)
             api_key.response_header_version(header.request_api_version),
         );
 
-    let _ = FetchResponse::default().encode(&mut response_buf, header.request_api_version);
+    let mut response_topics = Vec::with_capacity(req.topics.len());
+    for topic in req.topics {
+        let fetchable_topic_response = FetchableTopicResponse::default()
+            .with_topic(topic.topic)
+            .with_topic_id(topic.topic_id)
+            .with_partitions(vec![PartitionData::default()
+                .with_error_code(ResponseError::UnknownTopicId.code())
+                .with_partition_index(0)
+            ]);
+        response_topics.push(fetchable_topic_response);
+    }
+
+    let _ = FetchResponse::default()
+        //.with_error_code(ResponseError::UnknownTopicId.code())
+        .with_responses(response_topics)
+        .encode(&mut response_buf, header.request_api_version);
     response_buf
 }
 
