@@ -8,7 +8,7 @@ use kafka_protocol::messages::produce_response::{PartitionProduceResponse, Topic
 use kafka_protocol::protocol::Encodable;
 use kafka_protocol::ResponseError;
 use crate::meta_parser::{decode, Partition};
-use crate::utils::{group_topics, read_records};
+use crate::utils::{group_topics, read_records, write_records};
 
 pub fn process_api_version(header: RequestHeader, _req: ApiVersionsRequest) -> BytesMut{
     let mut response_buf = BytesMut::new();
@@ -75,6 +75,15 @@ pub fn process_produce(api_key : ApiKey, header: RequestHeader, req: ProduceRequ
             tp.partitions.first().unwrap().partition_id == topic.partition_data.first().unwrap().index.try_into().unwrap());
 
         let response_topic = if let Some(tp) = matched_topic {
+            let topic_name: &str = &topic.name;
+
+            if let Some(partition_data) = topic.partition_data.first() {
+                let partition_id = partition_data.index as u32;
+
+                if let Some(records) = partition_data.records.clone() {
+                    write_records(topic_name, partition_id, records);
+                }
+            }
             TopicProduceResponse::default()
                 .with_name(topic.name)
                 .with_partition_responses(vec!(PartitionProduceResponse::default()

@@ -1,4 +1,6 @@
 use std::fs;
+use std::fs::OpenOptions;
+use std::io::Write;
 use bytes::{Buf, Bytes, BytesMut};
 use indexmap::IndexMap;
 use uuid::Uuid;
@@ -53,4 +55,14 @@ pub fn read_records(topic_name: &str, partition_id : u32) -> Bytes{
     let file = fs::read(path).unwrap();
     let mut buf = BytesMut::from(&file[..]);
     buf.copy_to_bytes(buf.len())
+}
+
+pub fn write_records(topic_name: &str, partition_id : u32, records : Bytes) {
+    let path = format!("/tmp/kraft-combined-logs/{}-{}/00000000000000000000.log", topic_name, partition_id);
+
+    let mut file = match OpenOptions::new().create(true).append(true).open(&path) {
+        Ok(f) => f,
+        Err(_) => return,
+    };
+    let _ = file.write_all(&*records);
 }
