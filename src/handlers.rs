@@ -69,20 +69,20 @@ pub fn process_produce(api_key : ApiKey, header: RequestHeader, req: ProduceRequ
     let mut response_topics = Vec::with_capacity(req.topic_data.len());
     for topic in req.topic_data {
 
-        let requested_name = topic.topic_id.to_string();
+        let requested_name = topic.name.to_string();
         //HashMap ?
-        let matched_topic = grouped.iter().find(|tp| tp.topic.uuid.to_string() == requested_name);
+        let matched_topic = grouped.iter().find(|tp| tp.topic.name.to_string() == requested_name &&
+            tp.partitions.first().unwrap().partition_id == topic.partition_data.first().unwrap().index.try_into().unwrap());
 
         let response_topic = if let Some(tp) = matched_topic {
-            // FetchableTopicResponse::default()
-            //     .with_topic(topic.topic)
-            //     .with_topic_id(topic.topic_id)
-            //     .with_partitions(vec![PartitionData::default()
-            //         //.with_error_code(ResponseError::UnknownTopicId.code())
-            //         .with_partition_index(0)
-            //         .with_records(Some(read_records(tp.topic.name.as_str(),tp.partitions.first().unwrap().partition_id)))
-            //     ])
             TopicProduceResponse::default()
+                .with_name(topic.name)
+                .with_partition_responses(vec!(PartitionProduceResponse::default()
+                    .with_index(topic.partition_data.first().unwrap().index)
+                    .with_base_offset(0)
+                    .with_log_append_time_ms(-1)
+                    .with_log_start_offset(0)
+                ))
         } else {
             TopicProduceResponse::default()
                 .with_name(topic.name)
