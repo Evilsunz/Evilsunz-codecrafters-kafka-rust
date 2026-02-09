@@ -1,20 +1,16 @@
 use std::collections::BTreeMap;
-use std::{fs, thread};
-use std::process::Command;
-use bytes::{Buf, BytesMut};
+use bytes::{BytesMut};
 use kafka_protocol::messages::api_versions_response::ApiVersion;
-use kafka_protocol::messages::{ApiKey, ApiVersionsRequest, ApiVersionsResponse, BrokerId, DescribeTopicPartitionsRequest, DescribeTopicPartitionsResponse, FetchRequest, FetchResponse, RequestHeader, RequestKind, ResponseHeader, TopicName};
-use kafka_protocol::messages::describe_topic_partitions_response::{Cursor, DescribeTopicPartitionsResponsePartition, DescribeTopicPartitionsResponseTopic};
+use kafka_protocol::messages::{ApiKey, ApiVersionsRequest, ApiVersionsResponse, BrokerId, DescribeTopicPartitionsRequest, DescribeTopicPartitionsResponse, FetchRequest, FetchResponse, ProduceRequest, ProduceResponse, RequestHeader, ResponseHeader, TopicName};
+use kafka_protocol::messages::describe_topic_partitions_response::{DescribeTopicPartitionsResponsePartition, DescribeTopicPartitionsResponseTopic};
 use kafka_protocol::messages::fetch_response::{FetchableTopicResponse, PartitionData};
+use kafka_protocol::messages::produce_response::{PartitionProduceResponse, TopicProduceResponse};
 use kafka_protocol::protocol::Encodable;
-use kafka_protocol::protocol::types::Uuid;
-use kafka_protocol::records::RecordBatchDecoder;
 use kafka_protocol::ResponseError;
-use crate::meta_parser::{decode, Partition, RecordType, Topic};
+use crate::meta_parser::{decode, Partition};
 use crate::utils::{group_topics, read_records};
 
-pub fn process_api_version(header: RequestHeader, req: ApiVersionsRequest) -> BytesMut{
-    // First, encode the response body WITHOUT the message length prefix
+pub fn process_api_version(header: RequestHeader, _req: ApiVersionsRequest) -> BytesMut{
     let mut response_buf = BytesMut::new();
 
     // Encode correlation_id
@@ -42,7 +38,7 @@ pub fn process_api_version(header: RequestHeader, req: ApiVersionsRequest) -> By
         ));
 
     // Encode the response
-    let api_response = match api_version_resp.encode(&mut response_buf, header.request_api_version) {
+    let _ = match api_version_resp.encode(&mut response_buf, header.request_api_version) {
         Ok(_) => {}
         Err(_) => {
             ApiVersionsResponse::default()
@@ -50,6 +46,60 @@ pub fn process_api_version(header: RequestHeader, req: ApiVersionsRequest) -> By
                 .encode(&mut response_buf, 0).unwrap();
         }
     };
+
+    response_buf
+}
+
+pub fn process_produce(api_key : ApiKey, header: RequestHeader, req: ProduceRequest) -> BytesMut {
+    let res = decode().unwrap_or_else(|_| Vec::new());
+    println!(" +++++ {:#?}", res);
+
+    let grouped = group_topics(res);
+
+    let mut response_buf = BytesMut::new();
+
+    let _ = ResponseHeader::default()
+        .with_correlation_id(header.correlation_id)
+        .with_unknown_tagged_fields(BTreeMap::new())
+        .encode(
+            &mut response_buf,
+            api_key.response_header_version(header.request_api_version),
+        );
+
+    let mut response_topics = Vec::with_capacity(req.topic_data.len());
+    for topic in req.topic_data {
+
+        let requested_name = topic.topic_id.to_string();
+        //HashMap ?
+        let matched_topic = grouped.iter().find(|tp| tp.topic.uuid.to_string() == requested_name);
+
+        let response_topic = if let Some(tp) = matched_topic {
+            // FetchableTopicResponse::default()
+            //     .with_topic(topic.topic)
+            //     .with_topic_id(topic.topic_id)
+            //     .with_partitions(vec![PartitionData::default()
+            //         //.with_error_code(ResponseError::UnknownTopicId.code())
+            //         .with_partition_index(0)
+            //         .with_records(Some(read_records(tp.topic.name.as_str(),tp.partitions.first().unwrap().partition_id)))
+            //     ])
+            TopicProduceResponse::default()
+        } else {
+            TopicProduceResponse::default()
+                .with_name(topic.name)
+                .with_partition_responses(vec!(PartitionProduceResponse::default()
+                    .with_error_code(ResponseError::UnknownTopicOrPartition.code())
+                    .with_index(topic.partition_data.first().unwrap().index)
+                    .with_base_offset(-1)
+                    .with_log_append_time_ms(-1)
+                    .with_log_start_offset(-1)
+                ))
+        };
+        response_topics.push(response_topic);
+    }
+
+    let _ = ProduceResponse::default()
+        .with_responses(response_topics)
+        .encode(&mut response_buf, header.request_api_version);
 
     response_buf
 }

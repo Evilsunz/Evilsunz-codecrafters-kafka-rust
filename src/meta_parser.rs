@@ -1,7 +1,6 @@
 use bytes::{Buf, Bytes, BytesMut};
-use kafka_protocol::records::{Record, RecordBatchDecoder, RecordBatchEncoder};
-use std::{fs, thread,time};
-use std::process::Command;
+use kafka_protocol::records::{RecordBatchDecoder};
+use std::{fs};
 
 pub fn decode() -> anyhow::Result<Vec<RecordType>> {
     let path = "/tmp/kraft-combined-logs/__cluster_metadata-0/00000000000000000000.log";
@@ -96,6 +95,7 @@ fn get_header(data: &mut Bytes) -> Header {
     }
 }
 
+#[allow(dead_code)]
 #[derive(Debug)]
 pub enum RecordType {
     FeatureValue(Feature),
@@ -104,6 +104,7 @@ pub enum RecordType {
     None
 }
 
+#[allow(dead_code)]
 #[derive(Debug,Clone)]
 pub struct Header {
     pub frame_version: u8,
@@ -111,6 +112,7 @@ pub struct Header {
     pub version: u8,
 }
 
+#[allow(dead_code)]
 #[derive(Debug)]
 pub struct Feature {
     pub header: Header,
@@ -118,6 +120,7 @@ pub struct Feature {
     pub feature_level: u16,
 }
 
+#[allow(dead_code)]
 #[derive(Debug)]
 pub struct Topic {
     pub header: Header,
@@ -125,6 +128,7 @@ pub struct Topic {
     pub uuid: uuid::Uuid,
 }
 
+#[allow(dead_code)]
 #[derive(Debug,Clone)]
 pub struct Partition {
     pub header: Header,
