@@ -68,42 +68,78 @@ pub fn process_produce(api_key : ApiKey, header: RequestHeader, req: ProduceRequ
 
     let mut response_topics = Vec::with_capacity(req.topic_data.len());
     for topic in req.topic_data {
-
         let requested_name = topic.name.to_string();
-        //HashMap ?
-        let matched_topic = grouped.iter().find(|tp| tp.topic.name.to_string() == requested_name &&
-            tp.partitions.first().unwrap().partition_id == topic.partition_data.first().unwrap().index.try_into().unwrap());
 
-        let response_topic = if let Some(tp) = matched_topic {
-            let topic_name: &str = &topic.name;
+        // Match only by topic name; we will validate each requested partition below.
+        let matched_topic = grouped
+            .iter()
+            .find(|tp| tp.topic.name.to_string() == requested_name);
 
-            if let Some(partition_data) = topic.partition_data.first() {
-                let partition_id = partition_data.index as u32;
+        let mut partition_responses = Vec::with_capacity(topic.partition_data.len());
 
-                if let Some(records) = partition_data.records.clone() {
-                    write_records(topic_name, partition_id, records);
+        match matched_topic {
+            Some(tp) => {
+                let topic_name: &str = &topic.name;
+
+                for partition_data in &topic.partition_data {
+                    let partition_id_u32 = partition_data.index as u32;
+
+                    let partition_exists = tp
+                        .partitions
+                        .iter()
+                        .any(|p| p.partition_id == partition_id_u32);
+
+                    if !partition_exists {
+                        partition_responses.push(
+                            PartitionProduceResponse::default()
+                                .with_error_code(ResponseError::UnknownTopicOrPartition.code())
+                                .with_index(partition_data.index)
+                                .with_base_offset(-1)
+                                .with_log_append_time_ms(-1)
+                                .with_log_start_offset(-1),
+                        );
+                        continue;
+                    }
+
+                    if let Some(records) = partition_data.records.clone() {
+                        write_records(topic_name, partition_id_u32, records);
+                    }
+
+                    partition_responses.push(
+                        PartitionProduceResponse::default()
+                            .with_index(partition_data.index)
+                            .with_base_offset(0)
+                            .with_log_append_time_ms(-1)
+                            .with_log_start_offset(0),
+                    );
                 }
+
+                response_topics.push(
+                    TopicProduceResponse::default()
+                        .with_name(topic.name)
+                        .with_partition_responses(partition_responses),
+                );
             }
-            TopicProduceResponse::default()
-                .with_name(topic.name)
-                .with_partition_responses(vec!(PartitionProduceResponse::default()
-                    .with_index(topic.partition_data.first().unwrap().index)
-                    .with_base_offset(0)
-                    .with_log_append_time_ms(-1)
-                    .with_log_start_offset(0)
-                ))
-        } else {
-            TopicProduceResponse::default()
-                .with_name(topic.name)
-                .with_partition_responses(vec!(PartitionProduceResponse::default()
-                    .with_error_code(ResponseError::UnknownTopicOrPartition.code())
-                    .with_index(topic.partition_data.first().unwrap().index)
-                    .with_base_offset(-1)
-                    .with_log_append_time_ms(-1)
-                    .with_log_start_offset(-1)
-                ))
-        };
-        response_topics.push(response_topic);
+            None => {
+                // Topic doesn't exist: return an error for each partition in the request.
+                for partition_data in &topic.partition_data {
+                    partition_responses.push(
+                        PartitionProduceResponse::default()
+                            .with_error_code(ResponseError::UnknownTopicOrPartition.code())
+                            .with_index(partition_data.index)
+                            .with_base_offset(-1)
+                            .with_log_append_time_ms(-1)
+                            .with_log_start_offset(-1),
+                    );
+                }
+
+                response_topics.push(
+                    TopicProduceResponse::default()
+                        .with_name(topic.name)
+                        .with_partition_responses(partition_responses),
+                );
+            }
+        }
     }
 
     let _ = ProduceResponse::default()
